@@ -8,20 +8,18 @@ from tkinter import ttk,Label
 import subprocess
 import sys
 import numpy as np
+import re
 from PIL import Image, ImageTk
 
 test = True
-path_ = sys.argv[1]
-box = sys.argv[2]
+box = sys.argv[1]
+
+Image.MAX_IMAGE_PIXELS = 1000000000
 warnings.simplefilter('ignore', Image.DecompressionBombWarning)
 
 def images_to_load(box):
     m = [0,0,0,0]
-    (x1, y1, xf, yf) = (box[0], box[1], box[2], box[3])
-    x1_ = x1*2
-    y1_ = y1*2
-    xf_ = xf*2
-    yf_ = yf*2
+    (x1_, y1_, xf_, yf_) = (box[0], box[1], box[2], box[3])
 
     if xf_ < 8192 and yf_ < 8192:
         m[0] = 1
@@ -48,7 +46,93 @@ def images_to_load(box):
 
     return m
 
-#def get_coord(box):
+def create_im(m):
+    haut = False
+    bas = False
+    if not ((m[0] == 0) and (m[1] == 0)):
+        if (m[0] == 1) and (m[1] == 1):
+
+            images = map(Image.open, [path1, path2])
+            widths, heights = zip(*(i.size for i in images))
+
+            total_width = sum(widths)
+            max_height = max(heights)
+
+            new_im = Image.new('RGB', (total_width, max_height), color = None)
+
+            images = map(Image.open, [path1, path2])
+            x_offset = 0
+            for im in images:
+                new_im.paste(im, (x_offset,0))
+                x_offset += im.size[0]
+
+            new_im.save('haut.png')
+            haut = True
+        elif (m[0] == 0) and (m[1] == 1):
+            new_im = Image.open(path2)
+            new_im.save('haut.png')
+            haut = True
+
+        elif (m[0] == 1) and (m[1] == 0):
+            new_im = Image.open(path1)
+            new_im.save('haut.png')
+            haut = True
+
+    if not ((m[2] == 0) and (m[3] == 0)):
+        if (m[2] == 1) and (m[3] == 1):
+
+            images = map(Image.open, [path3, path4])
+            widths, heights = zip(*(i.size for i in images))
+
+            total_width = sum(widths)
+            max_height = max(heights)
+
+            new_im = Image.new('RGB', (total_width, max_height), color = None)
+
+            images = map(Image.open, [path3, path4])
+            x_offset = 0
+            for im in images:
+                new_im.paste(im, (x_offset,0))
+                x_offset += im.size[0]
+
+            new_im.save('bas.png')
+            bas = True
+
+        elif (m[2] == 0) and (m[3] == 1):
+            new_im = Image.open(path4)
+            new_im.save('bas.png')
+            bas = True
+
+        elif (m[2] == 1) and (m[3] == 0):
+            new_im = Image.open(path3)
+            new_im.save('bas.png')
+            bas = True
+
+    if (bas == True and haut == True):
+        images = map(Image.open, ['haut.png', 'bas.png'])
+        widths, heights = zip(*(i.size for i in images))
+
+
+        max_width = max(widths)
+        total_height = sum(heights)
+
+        new_im = Image.new('RGB', (max_width, total_height), color = None)
+
+        images = map(Image.open, ['haut.png', 'bas.png'])
+        y_offset = 0
+        for im in images:
+            new_im.paste(im, (0,y_offset))
+            y_offset += im.size[1]
+
+        new_im.save('image_final.png')
+
+    elif bas == True:
+        new_im = Image.open('bas.png')
+        new_im.save('image_final.png')
+
+    elif haut == True:
+        new_im = Image.open('haut.png')
+        new_im.save('image_final.png')
 
 
 class AutoScrollbar(ttk.Scrollbar):
@@ -115,7 +199,7 @@ class Zoom_Advanced(ttk.Frame):
             color = ('red', 'orange', 'yellow', 'green', 'blue')[random.randint(0, 4)]
             self.canvas.create_rectangle(x0, y0, x1, y1, fill=color, activefill='black')
         '''
-        self.show_image()
+        self.initial_show_image(boxs[0] ,boxs[1])
 
     def scroll_y(self, *args, **kwargs):
         ''' Scroll canvas vertically and redraw the image '''
@@ -135,6 +219,22 @@ class Zoom_Advanced(ttk.Frame):
         ''' Drag (move) canvas to the new position '''
         self.canvas.scan_dragto(event.x, event.y, gain=1)
         self.show_image()  # redraw the image
+
+    def initial_show_image(self, xg, yg, event=None):
+
+        self.canvas.update()
+        print("chargement")
+        if(xg > self.width - 600):
+            xg = self.width - 600
+        if(xg < 0):
+            xg = 0
+        if(yg > self.height - 600):
+            yg = self.height - 600
+        if(yg < 0):
+            yg = 0
+
+        self.canvas.scan_dragto(-xg,-yg, gain=1)
+        self.show_image()
 
     def wheel(self, event):
 
@@ -204,6 +304,7 @@ class Zoom_Advanced(ttk.Frame):
             self.canvas.lower(imageid)  # set image into background
             self.canvas.imagetk = imagetk  # keep an extra reference to prevent garbage-collection
 
+"""
 class InputApp(ttk.Frame):
 	def __init__(self, master=None):
 		ttk.Frame.__init__(self, master)
@@ -238,17 +339,27 @@ class InputApp(ttk.Frame):
 		self.root2.after(1, lambda: self.root2.focus_force())
 		self.inputBox.focus()
 		self.root2.mainloop()
+"""
 
 
-
-path = 'C400/'+path_  # place path to your image here
+#path = 'C400/'+path_  # place path to your image here
 #path = '1MFibres-32768_THD.png'  # place path to your image here
+path1 = 'C400/C400-Mesh_16384_0_0.png'
+path2 = 'C400/C400-Mesh_16384_1_0.png'
+path3 = 'C400/C400-Mesh_16384_0_1.png'
+path4 = 'C400/C400-Mesh_16384_1_1.png'
+
 coeff1 = int("6000")/8192
-inputWindow = InputApp()
-inputWindow.start()
+#inputWindow = InputApp()
+#inputWindow.start()
+boxs = ([int(s) for s in box.split(",") if s.isdigit()])
+
+# Création de l'image que l'on souhaite étudier
+m = images_to_load(boxs)
+create_im(m)
+
+#Lancement de tkinter
 root = tk.Tk()
 root.geometry('600x600') # Size 200, 200
-app = Zoom_Advanced(root, path=path)
-if (test==False):
-    root.destroy()
+app = Zoom_Advanced(root, path='image_final.png')
 root.mainloop()
