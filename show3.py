@@ -2,53 +2,229 @@
 # Advanced zoom example. Like in Google Maps.
 # It zooms only a tile, but not the whole image. So the zoomed tile occupies
 # constant memory and not crams it with a huge resized image for the large zooms.
+#Voir problème de mise à jour de matrice
+
 import random, warnings
 import tkinter as tk
 from tkinter import ttk,Label
 import subprocess
 import sys
 import numpy as np
+import re
 from PIL import Image, ImageTk
 
 test = True
-path_ = sys.argv[1]
+zoom = sys.argv[1]
 box = sys.argv[2]
+
+Image.MAX_IMAGE_PIXELS = 1000000000
 warnings.simplefilter('ignore', Image.DecompressionBombWarning)
 
-def images_to_load(box):
-    m = [0,0,0,0]
-    (x1, y1, xf, yf) = (box[0], box[1], box[2], box[3])
-    x1_ = x1*2
-    y1_ = y1*2
-    xf_ = xf*2
-    yf_ = yf*2
+def images_to_load(box, level):
+    global m
+    if level == 32768:
+        m = [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]
+        (x1_, y1_, xf_, yf_) = (box[0], box[1], box[2], box[3])
 
-    if xf_ < 8192 and yf_ < 8192:
-        m[0] = 1
-    elif x1_ > 8192 and yf_ < 8192:
-        m[1] = 1
-    elif xf_ < 8192 and y1_ > 8192:
-        m[2] = 1
-    elif x1_ > 8192 and y1_ > 8192:
-        m[3] = 1
-    elif yf_ < 8192:
-        m[0] = 1
-        m[1] = 1
-    elif y1_ > 8192:
-        m[2] = 1
-        m[3] = 1
-    elif xf_ < 8192:
-        m[0] = 1
-        m[2] = 1
-    elif x1_ > 8192:
-        m[1] = 1
-        m[3] = 1
-    else:
-        m = [1,1,1,1]
+        case1_x = x1_//8192
+        taille_x = xf_-x1_
+        case1_y = y1_//8192
+        taille_y = yf_-y1_
+
+        if taille_x <= 8192 and taille_y <= 8192:
+            m[case1_x][case1_y] = 1
+        elif taille_x > 8192 and taille_y <= 8192:
+            m[case1_x][case1_y] = 1
+            m[case1_x + 1][case1_y] = 1
+        elif taille_x <= 8192 and taille_y > 8192:
+            m[case1_x][case1_y] = 1
+            m[case1_x][case1_y + 1] = 1
+        elif taille_x > 8192 and taille_y > 8192:
+            m[case1_x][case1_y + 1] = 1
+            m[case1_x][case1_y + 1] = 1
+
+    elif level == 16384:
+        m = [[0,0],[0,0]]
+        (x1_, y1_, xf_, yf_) = (box[0], box[1], box[2], box[3])
+
+        if xf_ < 8192 and yf_ < 8192:
+            m[0][0] = 1
+        elif x1_ > 8192 and yf_ < 8192:
+            m[0][1] = 1
+        elif xf_ < 8192 and y1_ > 8192:
+            m[1][0] = 1
+        elif x1_ > 8192 and y1_ > 8192:
+            m[1][1] = 1
+        elif yf_ < 8192:
+            m[0][0] = 1
+            m[0][1] = 1
+        elif y1_ > 8192:
+            m[1][0] = 1
+            m[1][1] = 1
+        elif xf_ < 8192:
+            m[0][0] = 1
+            m[1][0] = 1
+        elif x1_ > 8192:
+            m[0][1] = 1
+            m[1][1] = 1
+        else:
+            m = [[1,1],[1,1]]
 
     return m
 
-#def get_coord(box):
+def create_im_haut(box, m, level):
+    if level == 32768:
+        (x1_, y1_, xf_, yf_) = (box[0], box[1], box[2], box[3])
+
+        case1_x = x1_//8192
+        taille_x = xf_-x1_
+        case1_y = y1_//8192
+        if taille_x < 8192:
+            return(Image.open('C400/C400-Mesh_32768_' + str(case1_x) + '_' + str(case1_y) + '.png'), True)
+        else:
+            images = map(Image.open, ['C400/C400-Mesh_32768_' + str(case1_x) + '_' + str(case1_y) + '.png',
+                                        'C400/C400-Mesh_32768_' + str(case1_x + 1) + '_' + str(case1_y) + '.png'])
+            widths, heights = zip(*(i.size for i in images))
+
+            total_width = sum(widths)
+            max_height = max(heights)
+
+            new_im_haut = Image.new('RGB', (total_width, max_height), color = None)
+
+            images = map(Image.open, ['C400/C400-Mesh_32768_' + str(case1_x) + '_' + str(case1_y) + '.png',
+                                        'C400/C400-Mesh_32768_' + str(case1_x + 1) + '_' + str(case1_y) + '.png'])
+            x_offset = 0
+            for im in images:
+                new_im_haut.paste(im, (x_offset,0))
+                x_offset += im.size[0]
+            haut = True
+            return(new_im_haut, haut)
+    elif level == 16384:
+        if not ((m[0][0] == 0) and (m[0][1] == 0)):
+            if (m[0][0] == 1) and (m[0][1] == 1):
+
+                images = map(Image.open, [path163841, path163842])
+                widths, heights = zip(*(i.size for i in images))
+
+                total_width = sum(widths)
+                max_height = max(heights)
+
+                new_im_haut = Image.new('RGB', (total_width, max_height), color = None)
+
+                images = map(Image.open, [path163841, path163842])
+                x_offset = 0
+                for im in images:
+                    new_im_haut.paste(im, (x_offset,0))
+                    x_offset += im.size[0]
+                haut = True
+                return(new_im_haut, haut)
+            elif (m[0][0] == 0) and (m[0][1] == 1):
+                new_im_haut = Image.open(path163842)
+                haut = True
+                return(new_im_haut, haut)
+
+            elif (m[0][0] == 1) and (m[0][1] == 0):
+                new_im_haut = Image.open(path163841)
+                haut = True
+                return(new_im_haut, haut)
+        else:
+            return([], False)
+
+def create_im_bas(box, m, level):
+    if level == 32768:
+        (x1_, y1_, xf_, yf_) = (box[0], box[1], box[2], box[3])
+
+        case1_x = x1_//8192
+        taille_x = xf_-x1_
+        case1_y = y1_//8192
+        taille_y = yf_-y1_
+
+        if taille_y < 8192:
+            return([], False)
+        else:
+            if taille_x < 8192:
+                return(Image.open('C400/C400-Mesh_32768_' + str(case1_x) + '_' + str(case1_y + 1) + '.png'), True)
+            else:
+                images = map(Image.open, ['C400/C400-Mesh_32768_' + str(case1_x) + '_' + str(case1_y + 1) + '.png',
+                                            'C400/C400-Mesh_32768_' + str(case1_x + 1) + '_' + str(case1_y + 1) + '.png'])
+                widths, heights = zip(*(i.size for i in images))
+
+                total_width = sum(widths)
+                max_height = max(heights)
+
+                new_im_haut = Image.new('RGB', (total_width, max_height), color = None)
+
+                images = map(Image.open, ['C400/C400-Mesh_32768_' + str(case1_x) + '_' + str(case1_y + 1) + '.png',
+                                            'C400/C400-Mesh_32768_' + str(case1_x + 1) + '_' + str(case1_y + 1) + '.png'])
+                x_offset = 0
+                for im in images:
+                    new_im_haut.paste(im, (x_offset,0))
+                    x_offset += im.size[0]
+                haut = True
+                return(new_im_haut, haut)
+    elif level == 16384:
+        if not ((m[1][0] == 0) and (m[1][1] == 0)):
+            if (m[1][0] == 1) and (m[1][1] == 1):
+
+                images = map(Image.open, [path163843, path163844])
+                widths, heights = zip(*(i.size for i in images))
+
+                total_width = sum(widths)
+                max_height = max(heights)
+
+                new_im_bas = Image.new('RGB', (total_width, max_height), color = None)
+
+                images = map(Image.open, [path163843, path163844])
+                x_offset = 0
+                for im in images:
+                    new_im_bas.paste(im, (x_offset,0))
+                    x_offset += im.size[0]
+                return(new_im_bas, True)
+
+
+            elif (m[1][0] == 0) and (m[1][1] == 1):
+                new_im_bas = Image.open(path163844)
+                return(new_im_bas, True)
+
+            elif (m[1][0] == 1) and (m[1][1] == 0):
+                new_im_bas = Image.open(path163843)
+                return(new_im_bas, True)
+        else:
+            return([], False)
+
+def create_im(boxs, m, level):
+    haut = False
+    bas = False
+
+    im_haut,haut = create_im_haut(boxs, m, level)
+    im_bas, bas = create_im_bas(boxs, m, level)
+
+
+    if (bas == True and haut == True):
+        images = [im_haut,im_bas]
+        widths, heights = zip(*(i.size for i in images))
+
+
+        max_width = max(widths)
+        total_height = sum(heights)
+
+        new_im = Image.new('RGB', (max_width, total_height), color = None)
+
+        images = [im_haut,im_bas]
+        y_offset = 0
+        for im in images:
+            new_im.paste(im, (0,y_offset))
+            y_offset += im.size[1]
+
+        return(new_im)
+
+    elif bas == True:
+        new_im = im_bas
+        return(new_im)
+
+    elif haut == True:
+        new_im = im_haut
+        return(new_im)
 
 
 class AutoScrollbar(ttk.Scrollbar):
@@ -69,9 +245,8 @@ class AutoScrollbar(ttk.Scrollbar):
 
 class Zoom_Advanced(ttk.Frame):
     ''' Advanced zoom of the image '''
-    def __init__(self, mainframe, path):
+    def __init__(self, mainframe):
 
-        global coeff1
         ''' Initialize the main Frame '''
         ttk.Frame.__init__(self, master=mainframe)
         self.master.title('Zoom with mouse wheel')
@@ -92,13 +267,16 @@ class Zoom_Advanced(ttk.Frame):
         self.master.columnconfigure(0, weight=1)
         # Bind events to the Canvas
         #self.canvas.scan_dragto()
+        self.m = images_to_load(boxs, level)
         self.canvas.bind('<Configure>', self.show_image)  # canvas is resized
         self.canvas.bind('<ButtonPress-1>', self.move_from)
         self.canvas.bind('<B1-Motion>',     self.move_to)
         self.canvas.bind('<MouseWheel>', self.wheel)  # with Windows and MacOS, but not Linux
         self.canvas.bind('<Button-5>',   self.wheel)  # only with Linux, wheel scroll down
         self.canvas.bind('<Button-4>',   self.wheel)  # only with Linux, wheel scroll up
-        self.image = Image.open(path)  # open image
+        # Création de l'image que l'on souhaite étudier
+        self.image = create_im(boxs, self.m, level)  # open image
+
         self.width, self.height = self.image.size
         self.imscale = 1  # scale for the canvaas image
         self.delta = 2  # zoom magnitude
@@ -115,7 +293,7 @@ class Zoom_Advanced(ttk.Frame):
             color = ('red', 'orange', 'yellow', 'green', 'blue')[random.randint(0, 4)]
             self.canvas.create_rectangle(x0, y0, x1, y1, fill=color, activefill='black')
         '''
-        self.show_image()
+        self.initial_show_image(boxs[0] ,boxs[1])
 
     def scroll_y(self, *args, **kwargs):
         ''' Scroll canvas vertically and redraw the image '''
@@ -135,6 +313,22 @@ class Zoom_Advanced(ttk.Frame):
         ''' Drag (move) canvas to the new position '''
         self.canvas.scan_dragto(event.x, event.y, gain=1)
         self.show_image()  # redraw the image
+
+    def initial_show_image(self, xg, yg, event=None):
+
+        self.canvas.update()
+        print("chargement")
+        if(xg > self.width - 600):
+            xg = self.width - 600
+        if(xg < 0):
+            xg = 0
+        if(yg > self.height - 600):
+            yg = self.height - 600
+        if(yg < 0):
+            yg = 0
+
+        self.canvas.scan_dragto(-xg,-yg, gain=1)
+        self.show_image()
 
     def wheel(self, event):
 
@@ -167,7 +361,9 @@ class Zoom_Advanced(ttk.Frame):
         self.show_image()
 
     def show_image(self, event=None):
+
         ''' Show image on the Canvas '''
+        test = True
         bbox1 = self.canvas.bbox(self.container)  # get image area
         # Remove 1 pixel shift at the sides of the bbox1
         bbox1 = (bbox1[0] + 1, bbox1[1] + 1, bbox1[2] - 1, bbox1[3] - 1)
@@ -192,6 +388,10 @@ class Zoom_Advanced(ttk.Frame):
         y1 = max(bbox2[1] - bbox1[1], 0)
         x2 = min(bbox2[2], bbox1[2]) - bbox1[0]
         y2 = min(bbox2[3], bbox1[3]) - bbox1[1]
+        #Insérer ici l'évolution de la matrice M
+        print(self.m)
+        self.m = self.update(x1,y1,x2,y2,level)
+        print("This is m", self.m)
         print("aaa",x1,y1,x2,y2)
         if int(x2 - x1) > 0 and int(y2 - y1) > 0:  # show image if it in the visible area
             x = min(int(x2 / self.imscale), self.width)   # sometimes it is larger on 1 pixel...
@@ -204,6 +404,88 @@ class Zoom_Advanced(ttk.Frame):
             self.canvas.lower(imageid)  # set image into background
             self.canvas.imagetk = imagetk  # keep an extra reference to prevent garbage-collection
 
+    def left_right_update(self, x1, y1, x2, y2, level):
+        global thru, lim
+        test = True
+        lim_droite = level // 8192 - 1
+        if (level == 16384):
+            thru = 2
+            lim = 8192
+        elif (level == 32768):
+            thru = 4
+            lim = 16384
+        if x1 == 0:
+            if (self.m[0][0] == 1) or (self.m[1][0] == 1) or (self.m[2][0] == 1) or (self.m[3][0] == 1):
+                print("Tout à gauche")
+            else:
+                for j in range(thru):
+                    for i in range(thru):
+                        if self.m[i][j] == 1:
+                            if self.m[i][j+1] == 0:
+                                self.m[i][j-1] = 1
+                            else:
+                                self.m[i][j-1] = 1
+                                self.m[i][j+1] = 0
+
+        elif x2 == lim:
+            if (self.m[0][lim_droite] == 1) or (self.m[1][lim_droite] == 1) or (self.m[2][lim_droite] == 1) or (self.m[3][lim_droite] == 1):
+                print("Tout à droite")
+            else:
+                for j in range(thru-1,0,-1):
+                    for i in range(thru):
+                        if self.m[i][j] == 1:
+                            if self.m[i][j-1] == 0:
+                                self.m[i][j+1] = 1
+                            else:
+                                self.m[i][j-1] = 0
+                                self.m[i][j+1] = 1
+        return(self.m)
+
+    def update(self, x1, y1, x2, y2, level):
+        global thru, lim
+        lim_bas = level // 8192 - 1
+        if (level == 16384):
+            thru = 2
+            lim = 8192
+        elif (level == 32768):
+            thru = 4
+            lim = 16384
+
+        if y1 == 0:
+            if (self.m[0][0] == 1) or (self.m[0][1] == 1) or (self.m[0][2] == 1) or (self.m[0][3] == 1):
+                #define new level
+                print("Tout en haut")
+            else:
+                for i in range(thru):
+                    for j in range(thru):
+                        if self.m[i][j] == 1:
+                            if self.m[i+1][j] == 0:
+                                self.m[i-1][j] = 1
+                            else:
+                                self.m[i+1][j] = 0
+                                self.m[i-1][j] = 1
+
+        elif y2 == lim:
+            if (self.m[lim_bas][0] == 1) or (self.m[lim_bas][1] == 1) or (self.m[lim_bas][2] == 1) or (self.m[lim_bas][3] == 1):
+                #define new level
+                print("Tout en bas")
+            else:
+                for i in range(thru):
+                    for j in range(thru,0,-1):
+                        if self.m[i][j] == 1:
+                            if self.m[i-1][j] == 0:
+                                self.m[i+1][j] = 1
+                            else:
+                                self.m[i+1][j] = 1
+                                self.m[i-1][j] = 0
+
+        self.m = self.left_right_update(x1, y1, x2, y2, level)
+        return(self.m)
+"""
+    #def load_new_images(box, level, m):
+
+
+"""
 class InputApp(ttk.Frame):
 	def __init__(self, master=None):
 		ttk.Frame.__init__(self, master)
@@ -241,14 +523,38 @@ class InputApp(ttk.Frame):
 
 
 
-path = 'C400/'+path_  # place path to your image here
+#path = 'C400/'+path_  # place path to your image here
 #path = '1MFibres-32768_THD.png'  # place path to your image here
+path163841 = 'C400/C400-Mesh_16384_0_0.png'
+path163842 = 'C400/C400-Mesh_16384_1_0.png'
+path163843 = 'C400/C400-Mesh_16384_0_1.png'
+path163844 = 'C400/C400-Mesh_16384_1_1.png'
+
+path327681 = 'C400/C400-Mesh_32768_0_0.png'
+path327682 = 'C400/C400-Mesh_32768_1_0.png'
+path327683 = 'C400/C400-Mesh_32768_2_0.png'
+path327684 = 'C400/C400-Mesh_32768_3_0.png'
+path327685 = 'C400/C400-Mesh_32768_0_1.png'
+path327686 = 'C400/C400-Mesh_32768_1_1.png'
+path327687 = 'C400/C400-Mesh_32768_2_1.png'
+path327688 = 'C400/C400-Mesh_32768_3_1.png'
+path327689 = 'C400/C400-Mesh_32768_0_2.png'
+path3276810 = 'C400/C400-Mesh_32768_1_2.png'
+path3276811 = 'C400/C400-Mesh_32768_2_2.png'
+path3276812 = 'C400/C400-Mesh_32768_3_2.png'
+path3276813 = 'C400/C400-Mesh_32768_0_3.png'
+path3276814 = 'C400/C400-Mesh_32768_1_3.png'
+path3276815 = 'C400/C400-Mesh_32768_2_3.png'
+path3276816 = 'C400/C400-Mesh_32768_3_3.png'
+
+level = int(zoom)
 coeff1 = int("6000")/8192
-inputWindow = InputApp()
-inputWindow.start()
+#inputWindow = InputApp()
+#inputWindow.start()
+boxs = ([int(s) for s in box.split(",") if s.isdigit()])
+print(boxs)
+#Lancement de tkinter
 root = tk.Tk()
 root.geometry('600x600') # Size 200, 200
-app = Zoom_Advanced(root, path=path)
-if (test==False):
-    root.destroy()
+app = Zoom_Advanced(root)
 root.mainloop()
